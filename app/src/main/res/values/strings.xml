@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RutaGear</string>
+    <string name="extension_description">Plays a custom sound when your SRAM rear derailleur shifts to granny gear or the smallest cog.</string>
+</resources>

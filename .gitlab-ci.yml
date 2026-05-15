@@ -1,0 +1,82 @@
+# CI/CD for the rutagear Karoo extension. Mirrors what
+# .github/workflows/build.yml does for the public GitHub
+# mirror, but also wires the device-install step that requires
+# a USB-attached Karoo on the bs shell runner — something a
+# GitHub runner can't have.
+
+stages:
+  - validate
+  - build
+  - deploy
+
+variables:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle-cache"
+
+validate:version-bump:
+  stage: validate
+  tags: [docker, bs]
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache git grep
+  script:
+    - set -eu
+    - |
+      if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+        echo "[bump] no parent commit, skipping"; exit 0
+      fi
+    - CHANGED=$(git diff --name-only HEAD~1 HEAD)
+    - echo "[bump] changed:"; echo "$CHANGED" | sed 's/^/  - /'
+    - |
+      RELEVANT=$(echo "$CHANGED" | grep -E '^app/src/|^app/build\.gradle\.kts$|^app/src/main/AndroidManifest\.xml$' || true)
+      if [ -z "$RELEVANT" ]; then echo "[bump] no app changes — skip"; exit 0; fi
+    - CUR=$(grep -E 'versionCode\s*=' app/build.gradle.kts | head -1 | grep -oE '[0-9]+')
+    - PREV=$(git show HEAD~1:app/build.gradle.kts | grep -E 'versionCode\s*=' | head -1 | grep -oE '[0-9]+')
+    - echo "[bump] prev=$PREV cur=$CUR"
+    - |
+      if [ -z "$CUR" ] || [ -z "$PREV" ]; then echo "[bump] parse fail"; exit 1; fi
+      if [ "$CUR" -le "$PREV" ]; then echo "[bump] FAIL bump versionCode"; exit 1; fi
+    - echo "[bump] OK"
+
+build:apk:
+  stage: build
+  tags: [docker, bs]
+  image: mobiledevops/android-sdk-image:34.0.0
+  cache:
+    key: rutagear-gradle
+    paths:
+      - .gradle-cache/caches
+      - .gradle-cache/wrapper
+  script:
+    - set -eu
+    - java -version
+    - ./gradlew --no-daemon clean assembleDebug
+    - ls -la app/build/outputs/apk/debug/
+  artifacts:
+    name: rutagear-apk-${CI_COMMIT_SHORT_SHA}
+    paths:
+      - app/build/outputs/apk/debug/app-debug.apk
+    expire_in: 2 weeks
+
+install:device:
+  stage: deploy
+  tags: [shell-user-bs]
+  needs:
+    - job: build:apk
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: on_success
+    - when: manual
+      allow_failure: true
+  script:
+    - set -eu
+    - export PATH="/home/robert/Android/Sdk/platform-tools:$PATH"
+    - adb start-server >/dev/null 2>&1 || true
+    - DEV=$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')
+    - |
+      if [ -z "$DEV" ]; then echo "[adb] no karoo attached — skipping"; adb devices; exit 0; fi
+    - echo "[adb] installing on $DEV"
+    - adb -s "$DEV" install -r app/build/outputs/apk/debug/app-debug.apk
+    - adb -s "$DEV" shell pm list packages app.rutagear || true
+    - echo "[adb] installed app.rutagear on $DEV"

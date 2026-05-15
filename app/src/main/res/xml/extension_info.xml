@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Side-effect-only extension: we listen to SHIFTING_REAR_GEAR and
+     play a sound. No DataType means nothing shows up in the Karoo data-
+     field picker, but the service is still started by the launcher
+     because of the KAROO_EXTENSION intent filter in AndroidManifest. -->
+<ExtensionInfo
+    id="rutagear"
+    displayName="@string/app_name"
+    icon="@drawable/ic_gear" />

@@ -1,0 +1,17 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.keystore
+google-services.json
+
+# Local-only: copy gradle.properties.example to ~/.gradle/ + fill in.
+# Don't commit your real PAT here.
